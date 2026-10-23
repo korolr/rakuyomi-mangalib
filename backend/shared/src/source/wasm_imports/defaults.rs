@@ -54,6 +54,7 @@ fn get(mut caller: Caller<'_, WasmStore>, key: Option<String>) -> Result<i32> {
 #[aidoku_wasm_function]
 fn set(_caller: Caller<'_, WasmStore>, key: Option<String>, value: i32) -> Result<()> {
     let key = key.context("key is required for set")?;
-    println!("defaults.set: {key:?} -> {value}");
+    let _ = value;
+    println!("defaults.set: {key:?}");
     Ok(())
 }

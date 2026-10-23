@@ -79,12 +79,7 @@ pub async fn ensure_chapter_is_in_storage(
 
     // FIXME like downloaderror is a really bad name??
     let pages = source
-        .get_page_list(
-            token.clone(),
-            chapter.id.manga_id().value().clone(),
-            chapter.id.value().clone(),
-            chapter.chapter_number,
-        )
+        .get_page_list_for_chapter(token.clone(), chapter)
         .await
         .with_context(|| "Failed to get page list")
         .map_err(Error::DownloadError)?;

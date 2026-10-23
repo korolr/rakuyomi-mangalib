@@ -139,6 +139,7 @@ fn set(
         &value,
     )?;
 
-    println!("defaults.set: {:?} -> {:?}", key, value);
+    // Values may be secrets (e.g. OAuth tokens): never log them.
+    println!("defaults.set: {:?}", key);
     Ok(0)
 }

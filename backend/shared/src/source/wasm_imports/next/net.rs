@@ -334,8 +334,21 @@ fn get_image(mut caller: Caller<'_, WasmStore>, request_ptr: i32) -> FFIResult {
         .unwrap_or(ResultContext::NotAnImage.into()))
 }
 #[aidoku_wasm_function]
-fn get_status_code(caller: Caller<'_, WasmStore>, request_ptr: i32) -> Result<i32> {
-    crate::source::wasm_imports::net::get_status_code(caller, request_ptr)
+fn get_status_code(mut caller: Caller<'_, WasmStore>, request_ptr: i32) -> Result<i32> {
+    // The next SDK expects the HTTP status code itself (`Response::status_code`
+    // returns it as-is), not a descriptor to a stored value like the legacy
+    // SDK import does.
+    let request_descriptor: usize = request_ptr
+        .try_into()
+        .context("invalid request descriptor")?;
+    let request = caller
+        .data_mut()
+        .get_mut_request(request_descriptor)
+        .context("failed to get request state")?;
+    match request {
+        RequestState::Sent(response) => Ok(response.status_code.as_u16() as i32),
+        _ => anyhow::bail!("request is not in sent state"),
+    }
 }
 #[aidoku_wasm_function]
 fn get_header(

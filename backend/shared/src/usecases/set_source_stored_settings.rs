@@ -20,9 +20,15 @@ pub fn set_source_stored_settings(
     // Clone the settings and save the cloned one first, so that we only change the application settings
     // iff everything goes well
     let mut updated_settings = settings.clone();
-    updated_settings
+    let previous = updated_settings
         .source_settings
         .insert(source_id.value().clone(), stored_settings);
+    crate::settings::linked::clear_live(source_id.value());
+    crate::settings::linked::propagate_changes(
+        &mut updated_settings,
+        source_id.value(),
+        previous.as_ref(),
+    );
     updated_settings.save_to_file(settings_path)?;
 
     source_manager.update_settings(updated_settings.clone(), arc_source_manager)?;

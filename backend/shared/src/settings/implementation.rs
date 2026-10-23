@@ -30,9 +30,20 @@ impl Settings {
     }
 
     pub fn save_to_file(&self, path: &Path) -> Result<()> {
-        let file = File::create(path)?;
+        // Write to a temporary file first and rename it over the real one, so
+        // a crash (or the Kindle going to sleep) never leaves a truncated
+        // settings file behind.
+        let mut tmp_name = path.as_os_str().to_owned();
+        tmp_name.push(".tmp");
+        let tmp_path = std::path::PathBuf::from(tmp_name);
+        {
+            let file = File::create(&tmp_path)?;
+            serde_json_lenient::to_writer_pretty(&file, self)?;
+            file.sync_all()?;
+        }
+        std::fs::rename(&tmp_path, path)?;
 
-        Ok(serde_json_lenient::to_writer_pretty(file, self)?)
+        Ok(())
     }
 
     /// Drops the Deno Deploy URL in favour of the current default. Only the

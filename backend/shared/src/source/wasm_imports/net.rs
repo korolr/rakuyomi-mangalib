@@ -270,6 +270,20 @@ pub fn send(mut caller: Caller<'_, WasmStore>, request_descriptor_i32: i32) -> R
         };
 
     // println!("[cookie] response status: {}", response.status());
+    #[cfg(not(any(feature = "ffi", not(feature = "all"))))]
+    if std::env::var_os("RAKUYOMI_NET_DEBUG").is_some() {
+        println!(
+            "[net] {:?} {} -> {} headers={:?}",
+            request_builder.method,
+            request_builder
+                .url
+                .as_ref()
+                .map(|u| u.to_string())
+                .unwrap_or_default(),
+            response.status(),
+            request_builder.headers.keys().collect::<Vec<_>>()
+        );
+    }
     // Auto-retry on 403: refresh cookies from the Telegram bot
     #[cfg(not(any(feature = "ffi", not(feature = "all"))))]
     if response.status() == reqwest::StatusCode::FORBIDDEN {

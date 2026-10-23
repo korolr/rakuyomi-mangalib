@@ -223,8 +223,14 @@ pub async fn build_state(home_path: PathBuf) -> Result<State> {
     let cookies_path = home_path.join("cookies.json");
     shared::cookie_store::init_cookie_store_with_path(&cookies_path)
         .context("couldn't initialize cookie store")?;
-    let settings = Settings::from_file(&settings_path)
+    let mut settings = Settings::from_file(&settings_path)
         .with_context(|| format!("couldn't read settings file at {}", settings_path.display()))?;
+    import_source_settings(&home_path, &settings_path, &mut settings);
+    if shared::settings::linked::fill_missing(&mut settings) {
+        if let Err(e) = settings.save_to_file(&settings_path) {
+            warn!("couldn't save linked source settings: {e:#}");
+        }
+    }
 
     shared::tls::set_proxy_url(settings.proxy_url.clone());
 
@@ -286,7 +292,141 @@ pub async fn build_state(home_path: PathBuf) -> Result<State> {
             .context("couldn't load sources")?;
     }
 
+    spawn_defaults_persister(&state);
+
     Ok(state)
+}
+
+/// Imports per-source settings dropped by the user into `<home>/import/`.
+///
+/// Each `<source_id>.json` file must contain a JSON object; its entries are
+/// merged into the stored settings of that source (non-string scalars keep
+/// their type, nested objects are stored as JSON strings). The file is deleted
+/// afterwards, as it typically contains secrets (e.g. MangaLib tokens) that
+/// would otherwise override newer, refreshed values on every start.
+fn import_source_settings(
+    home_path: &std::path::Path,
+    settings_path: &std::path::Path,
+    settings: &mut Settings,
+) {
+    use shared::settings::SourceSettingValue;
+
+    let import_dir = home_path.join("import");
+    let Ok(entries) = fs::read_dir(&import_dir) else {
+        return;
+    };
+    let mut changed = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let Some(source_id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_owned) else {
+            continue;
+        };
+        let parsed = fs::read_to_string(&path)
+            .map_err(anyhow::Error::from)
+            .and_then(|raw| {
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(
+                    raw.trim_start_matches('\u{feff}'),
+                )
+                .map_err(anyhow::Error::from)
+            });
+        let object = match parsed {
+            Ok(object) => object,
+            Err(e) => {
+                warn!("couldn't import settings from {}: {e:#}", path.display());
+                continue;
+            }
+        };
+        let object = shared::settings::linked::normalize_import(&source_id, object);
+        let previous = settings.source_settings.get(&source_id).cloned();
+        let stored = settings
+            .source_settings
+            .entry(source_id.clone())
+            .or_default();
+        for (key, value) in object {
+            let value = match value {
+                serde_json::Value::Null => SourceSettingValue::Null,
+                serde_json::Value::Bool(b) => SourceSettingValue::Bool(b),
+                serde_json::Value::Number(n) => match n.as_i64() {
+                    Some(i) => SourceSettingValue::Int(i),
+                    None => SourceSettingValue::Float(n.as_f64().unwrap_or_default()),
+                },
+                serde_json::Value::String(s) => SourceSettingValue::String(s),
+                serde_json::Value::Array(items) if items.iter().all(|i| i.is_string()) => {
+                    SourceSettingValue::Vec(
+                        items
+                            .into_iter()
+                            .filter_map(|i| i.as_str().map(str::to_owned))
+                            .collect(),
+                    )
+                }
+                other => SourceSettingValue::String(other.to_string()),
+            };
+            stored.insert(key, value);
+        }
+        shared::settings::linked::clear_live(&source_id);
+        shared::settings::linked::propagate_changes(settings, &source_id, previous.as_ref());
+        changed = true;
+        info!(
+            "imported settings for source {source_id} from {}",
+            path.display()
+        );
+        if let Err(e) = fs::remove_file(&path) {
+            warn!(
+                "couldn't remove imported settings file {}: {e:#}",
+                path.display()
+            );
+        }
+    }
+    if changed {
+        if let Err(e) = settings.save_to_file(settings_path) {
+            warn!("couldn't save imported source settings: {e:#}");
+        }
+    }
+}
+
+/// Persists values written by sources through `defaults.set` (for example a
+/// refreshed access/refresh token pair) into `settings.json`, so they survive
+/// restarts. Runs outside of the WASM call to avoid lock re-entrancy.
+fn spawn_defaults_persister(state: &State) {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(
+        String,
+        String,
+        shared::settings::SourceSettingValue,
+    )>();
+    shared::source::source_settings::set_defaults_persister(Box::new(
+        move |source_id, key, value| {
+            let _ = tx.send((source_id, key, value));
+        },
+    ));
+
+    let settings = state.settings.clone();
+    let settings_path = state.settings_path.clone();
+    let source_manager = state.source_manager.clone();
+    tokio::spawn(async move {
+        while let Some((source_id, key, value)) = rx.recv().await {
+            let mut settings = settings.lock().await;
+            let mut updated = settings.clone();
+            updated
+                .source_settings
+                .entry(source_id.clone())
+                .or_default()
+                .insert(key.clone(), value.clone());
+            shared::settings::linked::propagate_key(&mut updated, &source_id, &key, &value);
+            if let Err(e) = updated.save_to_file(&settings_path) {
+                warn!("failed to persist source setting {source_id}/{key}: {e:#}");
+                continue;
+            }
+            let mut manager = source_manager.lock().await;
+            if let Err(e) = manager.update_settings(updated.clone(), &source_manager) {
+                warn!("failed to apply source setting {source_id}/{key}: {e:#}");
+            }
+            *settings = updated;
+            info!("persisted source setting {source_id}/{key}");
+        }
+    });
 }
 
 /// Run the server on a transport chosen by [`pick_listener`].

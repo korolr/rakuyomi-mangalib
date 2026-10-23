@@ -1,4 +1,5 @@
 mod implementation;
+pub mod linked;
 mod schema;
 
 pub(crate) use schema::deserialize_source_lists;

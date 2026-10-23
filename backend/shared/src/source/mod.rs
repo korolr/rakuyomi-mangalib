@@ -423,6 +423,37 @@ impl Source {
         chapter_num: Option<f32>
     );
 
+    /// Like [`get_page_list`](Self::get_page_list), but hands the full chapter
+    /// metadata (number, volume, title, ...) to next-SDK Aidoku sources.
+    /// Aidoku itself always passes the complete `Chapter` object to
+    /// `get_page_list`, and some sources (e.g. the LibGroup/MangaLib one) build
+    /// the page request from `chapter_number`/`volume_number`, not only from
+    /// the chapter key.
+    pub async fn get_page_list_for_chapter(
+        &self,
+        cancellation_token: CancellationToken,
+        chapter: &crate::model::ChapterInformation,
+    ) -> Result<Vec<Page>> {
+        if let SourceBackend::Aidoku(blocking_source) = &self.backend {
+            let blocking_source = blocking_source.clone();
+            let chapter = chapter.clone();
+            return tokio::task::spawn_blocking(move || {
+                let mut guard = blocking_source.lock().unwrap_or_else(|e| e.into_inner());
+                guard.get_page_list_with_info(cancellation_token, &chapter)
+            })
+            .await
+            .map_err(|e| anyhow!("page list task failed: {e}"))?;
+        }
+
+        self.get_page_list(
+            cancellation_token,
+            chapter.id.manga_id().value().clone(),
+            chapter.id.value().clone(),
+            chapter.chapter_number,
+        )
+        .await
+    }
+
     /// Fetches the plaintext bytes of a page image. Keiyoushi sources run
     /// the request through the extension's own OkHttpClient inside the
     /// persistent engine session (`getPageList` is parsed once per chapter,
@@ -1205,6 +1236,53 @@ impl BlockingSource {
         })?;
 
         Ok(chapters)
+    }
+
+    pub fn get_page_list_with_info(
+        &mut self,
+        cancellation_token: CancellationToken,
+        chapter: &crate::model::ChapterInformation,
+    ) -> Result<Vec<Page>> {
+        let manga_id = chapter.id.manga_id().value().clone();
+        let chapter_id = chapter.id.value().clone();
+        self.ensure_booted()?;
+        if !self.next_sdk {
+            return self.get_page_list(
+                cancellation_token,
+                manga_id,
+                chapter_id,
+                chapter.chapter_number,
+            );
+        }
+
+        let aidoku_chapter = aidoku::Chapter {
+            key: chapter_id,
+            title: chapter.title.clone(),
+            chapter_number: chapter.chapter_number,
+            volume_number: chapter.volume_number,
+            date_uploaded: chapter.last_updated,
+            scanlators: chapter
+                .scanlator
+                .as_ref()
+                .map(|s| s.split(", ").map(str::to_owned).collect()),
+            url: chapter.url.as_ref().map(|u| u.to_string()),
+            language: chapter.lang.clone(),
+            thumbnail: chapter.thumbnail.as_ref().map(|u| u.to_string()),
+            locked: chapter.locked.unwrap_or(false),
+        };
+
+        self.get_page_list_next(
+            cancellation_token,
+            BlockingSource::create_aidoku_manga(manga_id.clone()),
+            aidoku_chapter,
+        )
+        .map(|pages| {
+            pages
+                .into_iter()
+                .enumerate()
+                .map(|(index, page)| Page::from(index, page, self.id.clone(), manga_id.clone()))
+                .collect()
+        })
     }
 
     pub fn get_page_list(
