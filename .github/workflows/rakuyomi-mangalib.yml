@@ -1,0 +1,127 @@
+# CI of the rakuyomi-mangalib fork: tests on every push, Kindle builds, and a
+# GitHub release for `v*` tags (e.g. v1.44.2-mangalib.1). Upstream workflow
+# files are left untouched (rebase-friendly); in the fork's own repository the
+# upstream ones (Build, CI, ...) are disabled in the Actions UI, see AGENTS.md.
+name: "rakuyomi-mangalib"
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install system deps
+        run: sudo apt update && sudo apt install -y pkg-config libfontconfig1-dev libfreetype6-dev zip python3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            backend -> target
+            sources/libgroup -> target
+            sources/ru.mangalib -> target
+      - name: Install JS dependencies
+        run: npm install
+      - name: Build JS assets
+        run: bash scripts/build-js-assets.sh
+      - name: Backend tests
+        run: cd backend && cargo test --all
+      - name: Source tests (libgroup)
+        run: |
+          cargo install --git https://github.com/Aidoku/aidoku-rs --rev ae6485e3c14ecd1fd5497d170eae884c68d04a87 aidoku-test-runner
+          cd sources/libgroup && cargo test
+      - name: Build sources
+        run: bash fork/build-sources.sh
+      - name: Token auth end-to-end test (mock API)
+        run: |
+          (cd backend && cargo build -p server)
+          python3 sources/tests/test_mangalib_auth.py -v
+      - name: Side-by-side transform check
+        run: |
+          bash fork/build.sh dev
+          sudo apt install -y lua-check || true
+          luacheck build/rakuyomi-mangalib.koplugin || true
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ["kindle", "kindlehf", "kindlea9", "desktop", "aarch64"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install system deps
+        run: |
+          sudo apt update && sudo apt install -y pkg-config libfontconfig1-dev libfreetype6-dev podman gettext zip python3
+          echo "CROSS_CONTAINER_ENGINE=podman" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "backend -> target"
+          prefix-key: "rakuyomi-mangalib-${{ matrix.target }}"
+      - name: Install cross
+        run: cargo install cross
+      - name: Install dependencies
+        run: npm install
+      - name: Build plugin
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export SEMANTIC_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            export SEMANTIC_RELEASE_VERSION="0.0.0-dev+${GITHUB_SHA::7}"
+          fi
+          bash fork/build.sh ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rakuyomi-mangalib-${{ matrix.target }}
+          path: build/rakuyomi-mangalib-${{ matrix.target }}.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rakuyomi-mangalib-*
+          merge-multiple: true
+      - name: Release notes and checksums
+        run: |
+          sha256sum rakuyomi-mangalib-*.zip > SHA256SUMS.txt
+          notes="fork/release-notes/${GITHUB_REF_NAME}.md"
+          if [[ -f "$notes" ]]; then cp "$notes" release-notes.md; else
+            echo "Сборка ${GITHUB_REF_NAME}. Установка, токены и использование: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}#readme. Для Kindle берите rakuyomi-mangalib-kindle.zip." > release-notes.md
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            rakuyomi-mangalib-*.zip
+            SHA256SUMS.txt
+          body_path: release-notes.md
