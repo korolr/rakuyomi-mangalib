@@ -8,6 +8,7 @@ server binary is started with the real `ru.mangalib.tokens.aix` source, whose
 
 Usage (from the repository root):
 
+
     fork/build-sources.sh    # -> build/sources/*.aix
     (cd backend && cargo build -p server)
     python3 sources/tests/test_mangalib_auth.py
