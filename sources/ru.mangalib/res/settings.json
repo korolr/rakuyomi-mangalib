@@ -1,0 +1,124 @@
+[
+	{
+		"type": "group",
+		"title": "Настройки",
+		"items": [
+			{
+				"type": "text",
+				"key": "baseUrl",
+				"title": "Веб домен",
+				"placeholder": "https://mangalib.me",
+				"keyboardType": 3,
+				"returnKeyType": 9,
+				"autocorrectionDisabled": true,
+				"default": "https://mangalib.me",
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "apiUrl",
+				"title": "Домен API",
+				"values": [
+					"https://api.cdnlibs.org",
+					"https://api2.mangalib.me",
+					"https://hapi.hentaicdn.org",
+					"https://api.imglib.info"
+				],
+				"titles": [
+					"Резервный (api.cdnlibs.org)",
+					"Резервный 2 (api2.mangalib.me)",
+					"Резервный 3 (hapi.hentaicdn.org)",
+					"Официальное приложение (api.imglib.info)"
+				],
+				"default": "https://api.cdnlibs.org",
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "imageServerUrl",
+				"title": "Сервер изображений",
+				"values": [
+					"compress",
+					"main",
+					"secondary"
+				],
+				"titles": [
+					"Сжатия",
+					"Первый",
+					"Второй"
+				],
+				"default": "compress",
+				"refreshes": [
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "coverQuality",
+				"title": "Качество обложки",
+				"values": [
+					"thumbnail",
+					"default",
+					"md",
+					"orig"
+				],
+				"titles": [
+					"Миниатюра",
+					"Стандартное",
+					"Среднее",
+					"Оригинал"
+				],
+				"default": "default",
+				"refreshes": [
+					"content"
+				]
+			}
+		]
+	},
+	{
+		"type": "group",
+		"title": "Аккаунт (токены)",
+		"footer": "Токены берутся из браузера: на mangalib.me в DevTools → Application → Local Storage → ключ «auth» (token.access_token и token.refresh_token). Access token обновляется автоматически по refresh token, новые значения сохраняются сюда же. В поле Access token можно вставить и весь JSON из «auth».",
+		"items": [
+			{
+				"type": "text",
+				"key": "accessToken",
+				"title": "Access token",
+				"placeholder": "eyJ0eXAiOiJKV1Qi...",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "text",
+				"key": "refreshToken",
+				"title": "Refresh token",
+				"placeholder": "def50200...",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "text",
+				"key": "authJson",
+				"title": "JSON из localStorage «auth» (необязательно)",
+				"placeholder": "{\"token\":{...}}",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			}
+		]
+	}
+]
