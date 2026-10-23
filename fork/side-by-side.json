@@ -1,0 +1,16 @@
+{
+  "_comment": "Single place that defines how the upstream rakuyomi.koplugin is turned into the side-by-side installable fork. Used by fork/side_by_side.py at package time; the upstream sources in frontend/ keep their original names.",
+  "plugin_dir": "rakuyomi-mangalib.koplugin",
+  "plugin_name": "rakuyomimangalib",
+  "fullname": "Rakuyomi MangaLib",
+  "description": "Rakuyomi с поддержкой MangaLib по access/refresh-токенам. Форк rakuyomi, ставится рядом с оригиналом.",
+  "module_prefix": "rakuyomimangalib.",
+  "settings_prefix": "rakuyomimangalib_",
+  "extra_settings_keys": ["exlucde_source_ids_select_search", "allow_commaneer_filemanager"],
+  "data_dir": "rakuyomi-mangalib",
+  "socket_path": "/tmp/rakuyomi-mangalib.sock",
+  "library_event": "StartRakuyomiMangaLibLibraryView",
+  "cbz_provider_priority": 109,
+  "disable_self_update": true,
+  "self_update_message": "Rakuyomi MangaLib: автообновление отключено, обновляйте плагин вручную со страницы релизов форка.\n\nAuto-update is disabled in this fork, please update manually."
+}

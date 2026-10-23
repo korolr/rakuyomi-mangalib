@@ -1,0 +1,24 @@
+rakuyomi-mangalib
+=================
+
+rakuyomi-mangalib is a modified version of rakuyomi
+(https://github.com/tachibana-shin/rakuyomi), originally by hanatsumi and
+tachibana-shin. It is based on upstream release 1.44.2 (commit 6e61856).
+
+Modifications made in October 2026:
+- token (access/refresh) authentication for MangaLib with automatic refresh
+  (bundled Aidoku sources built from sources/);
+- fixes in the Aidoku host (next-SDK status code, chapter metadata in
+  get_page_list, persisting source defaults, settings import, sharing tokens
+  between sources of one account);
+- packaging as a separate plugin, rakuyomi-mangalib.koplugin, that can be
+  installed next to rakuyomi (renamed at build time by fork/side_by_side.py:
+  data dir, socket, settings keys, Lua module namespace); self-update is
+  disabled in this package.
+
+rakuyomi and this fork are licensed under the GNU Affero General Public
+License v3.0. See LICENSE.
+
+The code under sources/ is derived from Aidoku-Community/sources
+(https://github.com/Aidoku-Community/sources) and is licensed under MIT or
+Apache-2.0. See sources/LICENSE-MIT and sources/LICENSE-APACHE.
