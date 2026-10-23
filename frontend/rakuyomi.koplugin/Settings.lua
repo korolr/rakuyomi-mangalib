@@ -27,8 +27,10 @@ local PageOverlap = require("utils/pageOverlap")
 
 local ffi = require("ffi")
 
-ffi.cdef [[
-  struct sysinfo {
+-- ffi.cdef is global for the whole KOReader process (other plugins may declare
+-- `struct sysinfo` too), so use a plugin-specific name bound to libc's sysinfo.
+pcall(ffi.cdef, [[
+  struct rakuyomi_sysinfo {
       long uptime;
       unsigned long loads[3];
       unsigned long totalram;
@@ -44,12 +46,12 @@ ffi.cdef [[
       unsigned int mem_unit;
       char _f[20-2*sizeof(long)-sizeof(int)];
   };
-  int sysinfo(struct sysinfo *info);
-]]
+  int rakuyomi_sysinfo(struct rakuyomi_sysinfo *info) asm("sysinfo");
+]])
 
 local function get_ram_via_ffi()
-  local info = ffi.new("struct sysinfo")
-  local ok, result = pcall(function() return ffi.C.sysinfo(info) end)  --not available on macOS
+  local info = ffi.new("struct rakuyomi_sysinfo")
+  local ok, result = pcall(function() return ffi.C.rakuyomi_sysinfo(info) end)  --not available on macOS
   if ok and result == 0 then
     local mem_unit = info.mem_unit > 0 and info.mem_unit or 1
     local total_bytes = tonumber(info.totalram) * mem_unit

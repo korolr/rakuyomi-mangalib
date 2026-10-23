@@ -86,10 +86,15 @@ local function mapSettingDefinitionToValueDefinition(setting_definition)
       placeholder = setting_definition.placeholder
     }
   elseif setting_definition.type == 'text' then
+    local key = setting_definition.key or ''
     return {
       type = 'string',
       title = setting_definition.title or setting_definition.placeholder or '',
-      placeholder = setting_definition.placeholder or ''
+      placeholder = setting_definition.placeholder or '',
+      -- do not show tokens/secrets on screen
+      secret = setting_definition.secure == true
+        or key:lower():find('token', 1, true) ~= nil
+        or key == 'authJson',
     }
   elseif setting_definition.type == 'link' then
     return {
@@ -274,6 +279,17 @@ end
 
 --- @private
 function SourceSettings:updateStoredSetting(key, new_value)
+  -- the source may have changed its settings in the meantime
+  -- (e.g. MangaLib rotating the access/refresh tokens), so start from the
+  -- current values instead of the ones fetched when this view was opened.
+  local current = Backend.getSourceStoredSettings(self.source_id)
+  if current.type ~= 'ERROR' and type(current.body) == 'table' then
+    for k, v in pairs(current.body) do
+      if k ~= key then
+        self.stored_settings[k] = v
+      end
+    end
+  end
   self.stored_settings[key] = new_value
 
   local response = Backend.setSourceStoredSettings(self.source_id, self.stored_settings)
