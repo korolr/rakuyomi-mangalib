@@ -1,0 +1,132 @@
+[
+	{
+		"type": "group",
+		"title": "Настройки",
+		"items": [
+			{
+				"type": "text",
+				"key": "baseUrl",
+				"title": "Веб домен",
+				"placeholder": "https://hentailib.me",
+				"keyboardType": 3,
+				"returnKeyType": 9,
+				"autocorrectionDisabled": true,
+				"default": "https://hentailib.me",
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "apiUrl",
+				"title": "Домен API",
+				"values": [
+					"https://hapi.hentaicdn.org",
+					"https://api.cdnlibs.org",
+					"https://api.imglib.info"
+				],
+				"titles": [
+					"Основной (hapi.hentaicdn.org)",
+					"Резервный (api.cdnlibs.org)",
+					"Официальное приложение (api.imglib.info)"
+				],
+				"default": "https://hapi.hentaicdn.org",
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "imageServerUrl",
+				"title": "Сервер изображений",
+				"values": [
+					"compress",
+					"main",
+					"secondary"
+				],
+				"titles": [
+					"Сжатия",
+					"Первый",
+					"Второй"
+				],
+				"default": "compress",
+				"refreshes": [
+					"content"
+				]
+			},
+			{
+				"type": "select",
+				"key": "coverQuality",
+				"title": "Качество обложки",
+				"values": [
+					"thumbnail",
+					"default",
+					"md",
+					"orig"
+				],
+				"titles": [
+					"Миниатюра",
+					"Стандартное",
+					"Среднее",
+					"Оригинал"
+				],
+				"default": "default",
+				"refreshes": [
+					"content"
+				]
+			}
+		]
+	},
+	{
+		"type": "group",
+		"title": "Аккаунт (токены)",
+		"footer": "Аккаунт общий для всех сайтов lib.social: токены те же, что и для MangaLib (DevTools → Application → Local Storage → «auth»). Если токены уже введены в источнике MangaLib (токены), они подставятся сюда автоматически, и наоборот; обновлённая пара сохраняется в оба источника. Без токенов главы HentaiLib не открываются. Для другого аккаунта включите «Отдельный аккаунт» и введите его токены здесь: тогда они не синхронизируются с MangaLib.",
+		"items": [
+			{
+				"type": "switch",
+				"key": "separateAccount",
+				"title": "Отдельный аккаунт (свои токены)",
+				"default": false,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "text",
+				"key": "accessToken",
+				"title": "Access token",
+				"placeholder": "eyJ0eXAiOiJKV1Qi...",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "text",
+				"key": "refreshToken",
+				"title": "Refresh token",
+				"placeholder": "def50200...",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			},
+			{
+				"type": "text",
+				"key": "authJson",
+				"title": "JSON из localStorage «auth» (необязательно)",
+				"placeholder": "{\"token\":{...}}",
+				"autocorrectionDisabled": true,
+				"refreshes": [
+					"listings",
+					"content"
+				]
+			}
+		]
+	}
+]
