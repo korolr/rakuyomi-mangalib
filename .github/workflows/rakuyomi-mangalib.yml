@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install system deps
-        run: sudo apt update && sudo apt install -y pkg-config libfontconfig1-dev libfreetype6-dev zip python3
+        run: sudo apt update && sudo apt install -y pkg-config libfontconfig1-dev libfreetype6-dev zip python3 gettext
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
