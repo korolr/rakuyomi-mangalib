@@ -193,6 +193,54 @@ fn zip_comment(chapter_id: &ChapterId) -> String {
     .to_string()
 }
 
+/// Writes `comment` into the ZIP end-of-central-directory record.
+///
+/// `epub-builder`'s `ZipLibrary` always stores an empty comment. The reader
+/// identifies a downloaded chapter by the JSON in that comment, so the
+/// comment is patched in after `EpubBuilder::generate`.
+fn write_zip_comment(file: &mut std::fs::File, comment: &str) -> anyhow::Result<()> {
+    use std::io::{Read, SeekFrom};
+
+    let comment_bytes = comment.as_bytes();
+    if comment_bytes.len() > u16::MAX as usize {
+        return Err(anyhow!("zip comment is too long"));
+    }
+
+    let len = file.seek(SeekFrom::End(0))?;
+    if len < 22 {
+        return Err(anyhow!("epub is too small to contain a zip end record"));
+    }
+
+    // The comment itself is at most 65535 bytes, and it sits after the
+    // 22-byte end record. Read that window from the end of the file.
+    let window = std::cmp::min(len, 22 + 65535);
+    file.seek(SeekFrom::End(-(window as i64)))?;
+    let mut buf = vec![0u8; window as usize];
+    file.read_exact(&mut buf)?;
+
+    let signature = [0x50, 0x4b, 0x05, 0x06];
+    let pos = buf
+        .windows(4)
+        .rposition(|candidate| candidate == signature)
+        .ok_or_else(|| anyhow!("zip end record not found"))?;
+    if pos + 22 > buf.len() {
+        return Err(anyhow!("truncated zip end record"));
+    }
+    let existing = u16::from_le_bytes([buf[pos + 20], buf[pos + 21]]) as usize;
+    if pos + 22 + existing != buf.len() {
+        return Err(anyhow!("zip comment does not end at the file"));
+    }
+    if existing != 0 {
+        return Err(anyhow!("epub already has a zip comment"));
+    }
+
+    let record_at = len - window + pos as u64;
+    file.seek(SeekFrom::Start(record_at + 20))?;
+    file.write_all(&(comment_bytes.len() as u16).to_le_bytes())?;
+    file.write_all(comment_bytes)?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn download_chapter_pages_as_cbz<W>(
     cancel_token: &CancellationToken,
@@ -647,6 +695,7 @@ where
     tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         let mut output = std::fs::OpenOptions::new()
             .create(true)
+            .read(true)
             .write(true)
             .truncate(true)
             .open(&temp_path)?;
@@ -769,8 +818,8 @@ where
             }
         }
 
-        epub.set_zip_comment(&comment);
         epub.generate(&mut output)?;
+        write_zip_comment(&mut output, &comment)?;
 
         Ok(())
     })
@@ -782,6 +831,32 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_write_zip_comment_appends_json_to_an_empty_epub_comment() {
+        let mut epub = EpubBuilder::new(ZipLibrary::new().unwrap()).unwrap();
+        epub.set_title("comment test");
+        let file = NamedTempFile::new().unwrap();
+        let mut output = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(file.path())
+            .unwrap();
+        epub.generate(&mut output).unwrap();
+
+        let comment = r#"{"source_id":"ru.mangalib.tokens","manga_id":"1","chapter_id":"2"}"#;
+        write_zip_comment(&mut output, comment).unwrap();
+
+        output.seek(std::io::SeekFrom::End(0)).unwrap();
+        let end = output.stream_position().unwrap();
+        output
+            .seek(std::io::SeekFrom::End(-(comment.len() as i64)))
+            .unwrap();
+        let mut found = vec![0u8; comment.len()];
+        std::io::Read::read_exact(&mut output, &mut found).unwrap();
+        assert_eq!(found, comment.as_bytes());
+        assert!(end > comment.len() as u64);
+    }
 
     #[test]
     fn test_image_retry_referer_keeps_only_the_origin() {
